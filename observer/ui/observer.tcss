@@ -8,7 +8,7 @@ Screen {
 }
 
 #sidebar {
-    width: 26;
+    width: 32;
     background: #0d1117;
     border-right: heavy #30363d;
     padding: 1;
@@ -27,6 +27,9 @@ Button.nav {
     color: #c9d1d9;
     border: none;
     border-left: thick #30363d;
+    content-align: left middle;
+    text-align: left;
+    padding: 0 1;
 }
 
 Button.nav:hover {

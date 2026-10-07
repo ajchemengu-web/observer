@@ -27,14 +27,14 @@ MODULES = {
 }
 
 NAV_ITEMS = [
-    ("dashboard", "1  ▣  Dashboard"),
-    ("scope", "2  ◎  Scope"),
-    ("recon", "3  ⌕  Recon / OSINT"),
-    ("webcheck", "4  ◈  Web App Checks"),
-    ("netscan", "5  ▤  Network Scan"),
-    ("vulnscan", "6  ⚠  Vuln Scan"),
-    ("monitor", "7  ◉  Net Monitor"),
-    ("reports", "8  ▦  Reports"),
+    ("dashboard", "1 ▣ Dashboard"),
+    ("scope", "2 ◎ Scope"),
+    ("recon", "3 ◇ Recon / OSINT"),
+    ("webcheck", "4 ◈ Web App Checks"),
+    ("netscan", "5 ▤ Network Scan"),
+    ("vulnscan", "6 ▲ Vuln Scan"),
+    ("monitor", "7 ◉ Net Monitor"),
+    ("reports", "8 ▦ Reports"),
 ]
 NAV_KEYS = [key for key, _ in NAV_ITEMS]
 
