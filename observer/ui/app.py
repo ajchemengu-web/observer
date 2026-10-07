@@ -12,6 +12,7 @@ from textual.widgets import (
 from ..models import Finding, Severity
 from ..report import save_report, list_reports
 from ..scope import ScopeManager, OutOfScopeError, require_in_scope
+from ..findings_store import append as store_append, load_all as store_load_all, clear as store_clear
 from ..modules import recon, webcheck, netscan, vulnscan, monitor
 
 CSS_PATH = Path(__file__).with_name("observer.tcss")
@@ -25,15 +26,16 @@ MODULES = {
 }
 
 NAV_ITEMS = [
-    ("dashboard", "📊 Dashboard"),
-    ("scope", "🎯 Scope"),
-    ("recon", "🔍 Recon / OSINT"),
-    ("webcheck", "🌐 Web App Checks"),
-    ("netscan", "📡 Network Scan"),
-    ("vulnscan", "🛡  Vulnerability Scan"),
-    ("monitor", "👁  Network Monitor"),
-    ("reports", "📁 Reports"),
+    ("dashboard", "1 📊 Dashboard"),
+    ("scope", "2 🎯 Scope"),
+    ("recon", "3 🔍 Recon / OSINT"),
+    ("webcheck", "4 🌐 Web App Checks"),
+    ("netscan", "5 📡 Network Scan"),
+    ("vulnscan", "6 🛡  Vulnerability Scan"),
+    ("monitor", "7 👁  Network Monitor"),
+    ("reports", "8 📁 Reports"),
 ]
+NAV_KEYS = [key for key, _ in NAV_ITEMS]
 
 
 class ObserverApp(App):
@@ -43,13 +45,25 @@ class ObserverApp(App):
     BINDINGS = [
         ("q", "quit", "Quit"),
         ("ctrl+c", "quit", "Quit"),
+        ("1", "goto('dashboard')", "Dashboard"),
+        ("2", "goto('scope')", "Scope"),
+        ("3", "goto('recon')", "Recon"),
+        ("4", "goto('webcheck')", "Web"),
+        ("5", "goto('netscan')", "NetScan"),
+        ("6", "goto('vulnscan')", "VulnScan"),
+        ("7", "goto('monitor')", "Monitor"),
+        ("8", "goto('reports')", "Reports"),
     ]
 
     def __init__(self):
         super().__init__()
         self.scope = ScopeManager()
-        self.all_findings: list[Finding] = []
+        self.all_findings: list[Finding] = store_load_all()
         self.current_view = "dashboard"
+
+    def action_goto(self, view: str) -> None:
+        if view in NAV_KEYS or view in ("dashboard", "scope", "reports"):
+            self.show_view(view)
 
     def compose(self) -> ComposeResult:
         yield Header(show_clock=True)
@@ -79,6 +93,12 @@ class ObserverApp(App):
             value = bid.removeprefix("scope-remove-")
             self.scope.remove(value)
             self.show_view("scope")
+        elif bid == "scope-import":
+            self.import_scope_file()
+        elif bid == "clear-history":
+            self.all_findings = []
+            store_clear()
+            self.show_view("dashboard")
 
     def show_view(self, view: str) -> None:
         self.current_view = view
@@ -121,12 +141,24 @@ class ObserverApp(App):
         box.compose_add_child(stats)
 
         box.compose_add_child(Static(
-            "Pick a module from the sidebar. Active modules (Recon, Web Checks, "
-            "Network Scan, Vulnerability Scan) only run against targets you've "
-            "added to Scope. The Network Monitor passively watches your own "
-            "interface for suspicious traffic and needs no scope entry.",
+            "Pick a module from the sidebar (or press 1-8). Active modules "
+            "(Recon, Web Checks, Network Scan, Vulnerability Scan) only run "
+            "against targets you've added to Scope. The Network Monitor "
+            "passively watches your own interface for suspicious traffic "
+            "and needs no scope entry.",
             classes="hint",
         ))
+
+        if self.all_findings:
+            recent = Vertical()
+            recent.compose_add_child(Static("Recent findings (all time, persisted)", classes="panel-title"))
+            table = DataTable()
+            table.add_columns("Severity", "Module", "Target", "Title")
+            for f in sorted(self.all_findings, key=lambda f: f.timestamp, reverse=True)[:30]:
+                table.add_row(f.severity.value.upper(), f.module, f.target, f.title)
+            recent.compose_add_child(table)
+            recent.compose_add_child(Button("Clear history", id="clear-history"))
+            box.compose_add_child(recent)
         return box
 
     # ---------- scope ----------
@@ -141,6 +173,15 @@ class ObserverApp(App):
         box.compose_add_child(Input(placeholder="domain, IP, or CIDR e.g. example.com", id="scope-value"))
         box.compose_add_child(Input(placeholder="note (optional) e.g. HackerOne program", id="scope-note"))
         box.compose_add_child(Button("Add to scope", id="scope-add", variant="primary"))
+
+        box.compose_add_child(Static(
+            "— or import a program's published scope file (one target per line, "
+            "'#' comments allowed) —",
+            classes="hint",
+        ))
+        box.compose_add_child(Input(placeholder="/path/to/scope.txt", id="scope-import-path"))
+        box.compose_add_child(Button("Import from file", id="scope-import"))
+        box.compose_add_child(Static(id="scope-import-status", classes="hint"))
 
         table = DataTable(id="scope-table")
         table.add_columns("Target", "Type", "Note", "")
@@ -157,6 +198,21 @@ class ObserverApp(App):
             value_input.value = ""
             note_input.value = ""
         self.show_view("scope")
+
+    def import_scope_file(self) -> None:
+        path_input = self.query_one("#scope-import-path", Input)
+        path = path_input.value.strip()
+        if not path:
+            return
+        try:
+            added, skipped = self.scope.import_file(path)
+            msg = f"Imported {added} target(s)."
+            if skipped:
+                msg += f" Skipped {len(skipped)} unrecognized line(s)."
+        except FileNotFoundError as exc:
+            msg = str(exc)
+        self.show_view("scope")
+        self.query_one("#scope-import-status", Static).update(msg)
 
     # ---------- modules ----------
 
@@ -221,6 +277,7 @@ class ObserverApp(App):
                 for f in findings:
                     table.add_row(f.severity.value.upper(), f.title, (f.detail or "")[:200])
                 self.all_findings.extend(findings)
+                store_append(findings)
                 log_widget.write_line(f"Done: {len(findings)} finding(s).")
                 if findings:
                     json_path, md_path = save_report(target or key, findings)

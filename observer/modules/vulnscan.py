@@ -27,6 +27,7 @@ def _nmap_available() -> bool:
 
 
 VULN_BLOCK_RE = re.compile(r"\|\s*([\w\-/.]+):\s*\n(.*?)(?=\n\S|\Z)", re.S)
+CVE_RE = re.compile(r"CVE-\d{4}-\d{4,7}")
 
 
 def run(target: str, log: LogFn = _noop, timeout: int = 600) -> list[Finding]:
@@ -52,10 +53,15 @@ def run(target: str, log: LogFn = _noop, timeout: int = 600) -> list[Finding]:
 
     if "VULNERABLE" in output:
         for match in re.finditer(r"^\|\s+(.+VULNERABLE.*)$", output, re.M):
+            line = match.group(1).strip()
+            cves = CVE_RE.findall(output[max(0, match.start() - 400):match.end() + 400])
+            title = "Potential vulnerability flagged by nmap NSE"
+            if cves:
+                title += f" ({', '.join(sorted(set(cves)))})"
             findings.append(Finding(
                 target=target, module=MODULE_NAME, severity=Severity.HIGH,
-                title="Potential vulnerability flagged by nmap NSE",
-                detail=match.group(1).strip(),
+                title=title,
+                detail=line,
             ))
     else:
         findings.append(Finding(

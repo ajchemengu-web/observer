@@ -87,6 +87,30 @@ class ScopeManager:
     def list(self) -> list[ScopeEntry]:
         return list(self.entries)
 
+    def import_file(self, path: str, note: str = "") -> tuple[int, list[str]]:
+        """Import one target per line from a plain-text scope file (as many
+        bug bounty programs publish). Blank lines and lines starting with
+        '#' are ignored. Returns (count_added, lines_skipped)."""
+        p = Path(path).expanduser()
+        if not p.exists():
+            raise FileNotFoundError(f"Scope file not found: {p}")
+
+        added = 0
+        skipped: list[str] = []
+        for raw_line in p.read_text().splitlines():
+            line = raw_line.strip()
+            if not line or line.startswith("#"):
+                continue
+            value = _normalize_target(line) if "://" in line else line.lower()
+            if _classify(value) == "domain" and any(c in value for c in " \t"):
+                skipped.append(raw_line)
+                continue
+            before = len(self.entries)
+            self.add(value, note or f"imported from {p.name}")
+            if len(self.entries) > before:
+                added += 1
+        return added, skipped
+
     def is_in_scope(self, raw_target: str) -> bool:
         host = _normalize_target(raw_target)
         for entry in self.entries:
