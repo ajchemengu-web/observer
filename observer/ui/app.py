@@ -6,6 +6,7 @@ from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
+from rich.text import Text
 from textual.widgets import (
     Button, DataTable, Footer, Header, Input, Label, LoadingIndicator,
     Log, Markdown, Rule, Static,
@@ -15,8 +16,16 @@ from ..models import Finding, Severity
 from ..report import save_report, list_reports
 from ..scope import ScopeManager, OutOfScopeError, require_in_scope
 from ..findings_store import append as store_append, load_all as store_load_all, clear as store_clear
+from ..correlate import score_all
 from ..modules import recon, webcheck, netscan, vulnscan, monitor
 from .widgets import SatelliteOrbit
+
+TIER_COLOR = {
+    "LOW": "green",
+    "MEDIUM": "yellow",
+    "HIGH": "orange1",
+    "CRITICAL": "bold red",
+}
 
 CSS_PATH = Path(__file__).with_name("observer.tcss")
 
@@ -181,6 +190,23 @@ class ObserverApp(App):
         box.compose_add_child(top)
 
         if self.all_findings:
+            box.compose_add_child(Rule())
+            risk = Vertical()
+            risk.compose_add_child(Static("Asset Risk Ranking (correlated)", classes="panel-title"))
+            risk.compose_add_child(Static(
+                "Fuses findings across modules per target into one score — "
+                "see docs/methodology.md for the formula and rule catalog.",
+                classes="hint",
+            ))
+            risk_table = DataTable(zebra_stripes=True)
+            risk_table.add_columns("Target", "Score", "Tier", "Findings", "Correlations triggered")
+            for r in score_all(self.all_findings):
+                rules_str = ", ".join(tr.name for tr in r.triggered_rules) or "—"
+                tier_cell = Text(r.tier, style=TIER_COLOR.get(r.tier, ""))
+                risk_table.add_row(r.target, f"{r.score:.1f}", tier_cell, str(r.finding_count), rules_str)
+            risk.compose_add_child(risk_table)
+            box.compose_add_child(risk)
+
             box.compose_add_child(Rule())
             recent = Vertical()
             recent.compose_add_child(Static("Recent findings (all time, persisted)", classes="panel-title"))
