@@ -1,0 +1,6 @@
+textual>=0.60.0
+rich>=13.7.0
+requests>=2.31.0
+dnspython>=2.6.0
+scapy>=2.5.0
+python-whois>=0.9.4
