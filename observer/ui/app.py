@@ -14,6 +14,7 @@ from ..report import save_report, list_reports
 from ..scope import ScopeManager, OutOfScopeError, require_in_scope
 from ..findings_store import append as store_append, load_all as store_load_all, clear as store_clear
 from ..modules import recon, webcheck, netscan, vulnscan, monitor
+from .widgets import SatelliteOrbit
 
 CSS_PATH = Path(__file__).with_name("observer.tcss")
 
@@ -26,14 +27,14 @@ MODULES = {
 }
 
 NAV_ITEMS = [
-    ("dashboard", "1 📊 Dashboard"),
-    ("scope", "2 🎯 Scope"),
-    ("recon", "3 🔍 Recon / OSINT"),
-    ("webcheck", "4 🌐 Web App Checks"),
-    ("netscan", "5 📡 Network Scan"),
-    ("vulnscan", "6 🛡  Vulnerability Scan"),
-    ("monitor", "7 👁  Network Monitor"),
-    ("reports", "8 📁 Reports"),
+    ("dashboard", "1  ▣  Dashboard"),
+    ("scope", "2  ◎  Scope"),
+    ("recon", "3  ⌕  Recon / OSINT"),
+    ("webcheck", "4  ◈  Web App Checks"),
+    ("netscan", "5  ▤  Network Scan"),
+    ("vulnscan", "6  ⚠  Vuln Scan"),
+    ("monitor", "7  ◉  Net Monitor"),
+    ("reports", "8  ▦  Reports"),
 ]
 NAV_KEYS = [key for key, _ in NAV_ITEMS]
 
@@ -126,8 +127,11 @@ class ObserverApp(App):
             counts[f.severity] += 1
 
         box = Vertical()
-        box.compose_add_child(Static("Dashboard", classes="panel-title"))
-        box.compose_add_child(Static(
+
+        top = Horizontal(id="dashboard-top")
+        left = Vertical(id="dashboard-left")
+        left.compose_add_child(Static("Dashboard", classes="panel-title"))
+        left.compose_add_child(Static(
             f"Scope: {len(self.scope.list())} target(s) authorized · "
             f"{len(self.all_findings)} finding(s) this session",
             classes="hint",
@@ -138,9 +142,9 @@ class ObserverApp(App):
             stats.compose_add_child(Static(
                 f"{sev.value.upper()}\n{counts[sev]}", classes=f"stat-box stat-{sev.value}"
             ))
-        box.compose_add_child(stats)
+        left.compose_add_child(stats)
 
-        box.compose_add_child(Static(
+        left.compose_add_child(Static(
             "Pick a module from the sidebar (or press 1-8). Active modules "
             "(Recon, Web Checks, Network Scan, Vulnerability Scan) only run "
             "against targets you've added to Scope. The Network Monitor "
@@ -148,6 +152,14 @@ class ObserverApp(App):
             "and needs no scope entry.",
             classes="hint",
         ))
+        top.compose_add_child(left)
+
+        orbit_panel = Vertical(id="orbit-panel")
+        orbit_panel.compose_add_child(Static("UPLINK", classes="orbit-title"))
+        orbit_panel.compose_add_child(SatelliteOrbit())
+        top.compose_add_child(orbit_panel)
+
+        box.compose_add_child(top)
 
         if self.all_findings:
             recent = Vertical()

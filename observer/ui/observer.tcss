@@ -76,6 +76,32 @@ Button.nav.-active {
 .stat-high { color: orange; }
 .stat-critical { color: red; }
 
+#dashboard-top {
+    height: auto;
+    layout: horizontal;
+}
+
+#dashboard-left {
+    width: 1fr;
+    height: auto;
+}
+
+#orbit-panel {
+    width: 37;
+    height: auto;
+    margin-left: 2;
+    border: round #30363d;
+    padding: 0 1;
+    align: center middle;
+}
+
+.orbit-title {
+    text-style: bold;
+    color: #58a6ff;
+    text-align: center;
+    width: 100%;
+}
+
 DataTable {
     height: 1fr;
 }
