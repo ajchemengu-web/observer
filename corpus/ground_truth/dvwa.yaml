@@ -1,0 +1,43 @@
+# DRAFT / UNVERIFIED — see _SCHEMA.md before trusting anything here.
+
+target: dvwa
+
+expected_detections:
+  - id: no-tls-configured
+    description: "DVWA's default container serves plain HTTP; TLS check should fail to connect cleanly."
+    category: tls-weakness
+    expected_min_severity: info
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+  - id: open-http-port
+    description: "netscan should report the mapped port open, service http."
+    category: open-port
+    expected_min_severity: info
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+  - id: apache_php_banner_disclosure
+    description: >
+      DVWA's stock Apache/PHP image commonly runs with default banner
+      settings (ServerTokens/ServerSignature not hardened), which would
+      surface as a "Server/tech banner disclosed" finding from webcheck
+      and/or a version string in netscan's service detection. Verify the
+      actual Server header value against the live container before
+      confirming — do not assume a specific version string.
+    category: banner-disclosure
+    expected_min_severity: low
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+# Explicitly out of scope for this tool: DVWA's SQLi/XSS/CSRF/command-
+# injection challenge pages require application-logic testing this
+# tool's current modules do not perform. See _SCHEMA.md.
+
+false_positives: []

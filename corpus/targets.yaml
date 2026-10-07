@@ -1,0 +1,38 @@
+# Evaluation corpus: intentionally-vulnerable lab targets.
+#
+# These run locally via Docker (see corpus/README.md for the exact
+# commands) and are bound only to 127.0.0.1 — never point this harness
+# at a target you do not own or are not authorized to test.
+#
+# `run_modules` is deliberately a subset per target: these are web
+# applications, not domains, so recon's DNS/whois/subdomain-enumeration
+# logic does not apply here (that module is evaluated separately,
+# against real scoped domains). This corpus specifically evaluates the
+# config/exposure-level modules (webcheck, netscan) and the correlation
+# engine's scoring of their output — see docs/methodology.md limitations
+# section on what this tool does and does not detect.
+
+targets:
+  - name: juice-shop
+    description: "OWASP Juice Shop — deliberately vulnerable Node.js web app"
+    host: "127.0.0.1"
+    port: 3000
+    url: "http://127.0.0.1:3000"
+    run_modules: [webcheck, netscan]
+    ground_truth: ground_truth/juice-shop.yaml
+
+  - name: dvwa
+    description: "Damn Vulnerable Web Application (PHP/MySQL)"
+    host: "127.0.0.1"
+    port: 8081
+    url: "http://127.0.0.1:8081"
+    run_modules: [webcheck, netscan]
+    ground_truth: ground_truth/dvwa.yaml
+
+  - name: webgoat
+    description: "OWASP WebGoat — deliberately vulnerable Java training app"
+    host: "127.0.0.1"
+    port: 8082
+    url: "http://127.0.0.1:8082"
+    run_modules: [webcheck, netscan]
+    ground_truth: ground_truth/webgoat.yaml

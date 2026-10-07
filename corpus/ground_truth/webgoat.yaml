@@ -1,0 +1,40 @@
+# DRAFT / UNVERIFIED — see _SCHEMA.md before trusting anything here.
+
+target: webgoat
+
+expected_detections:
+  - id: no-tls-configured
+    description: "WebGoat's default container serves plain HTTP; TLS check should fail to connect cleanly."
+    category: tls-weakness
+    expected_min_severity: info
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+  - id: open-http-port
+    description: "netscan should report the mapped port open, service http (embedded Tomcat/Spring Boot)."
+    category: open-port
+    expected_min_severity: info
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+  - id: missing-security-headers
+    description: >
+      Spring Boot does not add most browser security headers by default
+      unless explicitly configured. Verify which of HSTS/CSP/
+      X-Frame-Options are actually absent before confirming.
+    category: missing-security-header
+    expected_min_severity: low
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+# Explicitly out of scope for this tool: WebGoat's lesson pages require
+# application-logic testing (injection, deserialization, auth flaws)
+# this tool's current modules do not perform. See _SCHEMA.md.
+
+false_positives: []

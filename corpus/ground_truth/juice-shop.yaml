@@ -1,0 +1,49 @@
+# DRAFT / UNVERIFIED — see _SCHEMA.md before trusting anything here.
+# Fill in status/verified_by/verified_date/notes once you've actually
+# run corpus/run_corpus.py against a live juice-shop container and
+# manually checked each item.
+
+target: juice-shop
+
+expected_detections:
+  - id: no-tls-configured
+    description: >
+      Juice Shop's default container serves plain HTTP with no TLS
+      listener on the mapped port; webcheck's TLS check should fail to
+      connect (reported as an INFO-level "TLS check failed" finding)
+      rather than silently succeeding or crashing.
+    category: tls-weakness
+    expected_min_severity: info
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+  - id: open-http-port
+    description: "netscan should report the mapped port open with an http-family service."
+    category: open-port
+    expected_min_severity: info
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+  - id: missing-security-headers
+    description: >
+      Confirm which of HSTS/CSP/X-Frame-Options/Permissions-Policy are
+      actually absent from Juice Shop's default response — do not assume
+      which ones without checking; Express middleware configuration
+      varies by version.
+    category: missing-security-header
+    expected_min_severity: low
+    status: unverified
+    verified_by: ""
+    verified_date: ""
+    notes: ""
+
+# Explicitly out of scope for this tool (do not add as "missed" findings):
+# SQL injection, XSS, broken access control, API/business-logic flaws —
+# the entire point of Juice Shop's challenge catalog, and not something
+# webcheck/netscan are designed to detect. See _SCHEMA.md.
+
+false_positives: []

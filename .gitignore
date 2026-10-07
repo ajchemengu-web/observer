@@ -4,3 +4,7 @@ __pycache__/
 reports/*.json
 reports/*.md
 !reports/.gitkeep
+corpus/results/*.json
+!corpus/results/.gitkeep
+corpus/.corpus_scope.json
+.pytest_cache/
