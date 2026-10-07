@@ -1,12 +1,14 @@
 from __future__ import annotations
 
 import threading
+from datetime import datetime
 from pathlib import Path
 
 from textual.app import App, ComposeResult
 from textual.containers import Container, Horizontal, Vertical, VerticalScroll
 from textual.widgets import (
-    Button, DataTable, Footer, Header, Input, Label, Log, Static,
+    Button, DataTable, Footer, Header, Input, Label, LoadingIndicator,
+    Log, Markdown, Rule, Static,
 )
 
 from ..models import Finding, Severity
@@ -26,16 +28,30 @@ MODULES = {
     "monitor": (monitor, "Network Monitor (passive)", True),  # True = interface, not scope-gated target
 }
 
-NAV_ITEMS = [
-    ("dashboard", "1 ▣ Dashboard"),
-    ("scope", "2 ◎ Scope"),
-    ("recon", "3 ◇ Recon / OSINT"),
-    ("webcheck", "4 ◈ Web App Checks"),
-    ("netscan", "5 ▤ Network Scan"),
-    ("vulnscan", "6 ▲ Vuln Scan"),
-    ("monitor", "7 ◉ Net Monitor"),
-    ("reports", "8 ▦ Reports"),
-]
+ICONS = {
+    "dashboard": "▣",
+    "scope": "◎",
+    "recon": "◇",
+    "webcheck": "◈",
+    "netscan": "▤",
+    "vulnscan": "▲",
+    "monitor": "◉",
+    "reports": "▦",
+}
+
+NAV_LABELS = {
+    "dashboard": "Dashboard",
+    "scope": "Scope",
+    "recon": "Recon / OSINT",
+    "webcheck": "Web App Checks",
+    "netscan": "Network Scan",
+    "vulnscan": "Vuln Scan",
+    "monitor": "Net Monitor",
+    "reports": "Reports",
+}
+
+NAV_ORDER = ["dashboard", "scope", "recon", "webcheck", "netscan", "vulnscan", "monitor", "reports"]
+NAV_ITEMS = [(k, f"{i + 1} {ICONS[k]} {NAV_LABELS[k]}") for i, k in enumerate(NAV_ORDER)]
 NAV_KEYS = [key for key, _ in NAV_ITEMS]
 
 
@@ -61,6 +77,7 @@ class ObserverApp(App):
         self.scope = ScopeManager()
         self.all_findings: list[Finding] = store_load_all()
         self.current_view = "dashboard"
+        self._report_paths: list[Path] = []
 
     def action_goto(self, view: str) -> None:
         if view in NAV_KEYS or view in ("dashboard", "scope", "reports"):
@@ -91,8 +108,10 @@ class ObserverApp(App):
         elif bid == "scope-add":
             self.add_scope_entry()
         elif bid.startswith("scope-remove-"):
-            value = bid.removeprefix("scope-remove-")
-            self.scope.remove(value)
+            idx_str = bid.removeprefix("scope-remove-")
+            entries = self.scope.list()
+            if idx_str.isdigit() and int(idx_str) < len(entries):
+                self.scope.remove(entries[int(idx_str)].value)
             self.show_view("scope")
         elif bid == "scope-import":
             self.import_scope_file()
@@ -130,7 +149,7 @@ class ObserverApp(App):
 
         top = Horizontal(id="dashboard-top")
         left = Vertical(id="dashboard-left")
-        left.compose_add_child(Static("Dashboard", classes="panel-title"))
+        left.compose_add_child(Static(f"{ICONS['dashboard']} Dashboard", classes="panel-title"))
         left.compose_add_child(Static(
             f"Scope: {len(self.scope.list())} target(s) authorized · "
             f"{len(self.all_findings)} finding(s) this session",
@@ -162,9 +181,10 @@ class ObserverApp(App):
         box.compose_add_child(top)
 
         if self.all_findings:
+            box.compose_add_child(Rule())
             recent = Vertical()
             recent.compose_add_child(Static("Recent findings (all time, persisted)", classes="panel-title"))
-            table = DataTable()
+            table = DataTable(zebra_stripes=True)
             table.add_columns("Severity", "Module", "Target", "Title")
             for f in sorted(self.all_findings, key=lambda f: f.timestamp, reverse=True)[:30]:
                 table.add_row(f.severity.value.upper(), f.module, f.target, f.title)
@@ -177,29 +197,52 @@ class ObserverApp(App):
 
     def _build_scope(self) -> Container:
         box = Vertical()
-        box.compose_add_child(Static("Scope — authorized targets", classes="panel-title"))
-        box.compose_add_child(Static(
+        box.compose_add_child(Static(f"{ICONS['scope']} Scope — authorized targets", classes="panel-title"))
+
+        form = Vertical(classes="card")
+        form.compose_add_child(Static(
             "Only domains/IPs/CIDRs added here can be targeted by active modules.",
             classes="hint",
         ))
-        box.compose_add_child(Input(placeholder="domain, IP, or CIDR e.g. example.com", id="scope-value"))
-        box.compose_add_child(Input(placeholder="note (optional) e.g. HackerOne program", id="scope-note"))
-        box.compose_add_child(Button("Add to scope", id="scope-add", variant="primary"))
+        form.compose_add_child(Input(placeholder="domain, IP, or CIDR e.g. example.com", id="scope-value"))
+        form.compose_add_child(Input(placeholder="note (optional) e.g. HackerOne program", id="scope-note"))
+        form.compose_add_child(Button("+ Add to scope", id="scope-add", variant="primary"))
+        box.compose_add_child(form)
 
-        box.compose_add_child(Static(
-            "— or import a program's published scope file (one target per line, "
-            "'#' comments allowed) —",
+        import_form = Vertical(classes="card")
+        import_form.compose_add_child(Static(
+            "Or import a program's published scope file "
+            "(one target per line, '#' comments allowed):",
             classes="hint",
         ))
-        box.compose_add_child(Input(placeholder="/path/to/scope.txt", id="scope-import-path"))
-        box.compose_add_child(Button("Import from file", id="scope-import"))
-        box.compose_add_child(Static(id="scope-import-status", classes="hint"))
+        import_form.compose_add_child(Input(placeholder="/path/to/scope.txt", id="scope-import-path"))
+        import_form.compose_add_child(Button("⤓ Import from file", id="scope-import"))
+        import_form.compose_add_child(Static(id="scope-import-status", classes="hint"))
+        box.compose_add_child(import_form)
 
-        table = DataTable(id="scope-table")
-        table.add_columns("Target", "Type", "Note", "")
-        for entry in self.scope.list():
-            table.add_row(entry.value, entry.kind, entry.note, f"[remove]")
-        box.compose_add_child(table)
+        box.compose_add_child(Rule())
+
+        entries = self.scope.list()
+        list_panel = Vertical(classes="card")
+        if not entries:
+            list_panel.compose_add_child(Static(
+                "No targets yet — add one above or import a scope file.", classes="hint",
+            ))
+        else:
+            header = Horizontal(classes="scope-row scope-header")
+            header.compose_add_child(Static("TARGET", classes="scope-col-target"))
+            header.compose_add_child(Static("TYPE", classes="scope-col-type"))
+            header.compose_add_child(Static("NOTE", classes="scope-col-note"))
+            header.compose_add_child(Static("", classes="scope-col-action"))
+            list_panel.compose_add_child(header)
+            for idx, entry in enumerate(entries):
+                row = Horizontal(classes="scope-row")
+                row.compose_add_child(Static(entry.value, classes="scope-col-target"))
+                row.compose_add_child(Static(entry.kind, classes="scope-col-type"))
+                row.compose_add_child(Static(entry.note or "—", classes="scope-col-note"))
+                row.compose_add_child(Button("✕", id=f"scope-remove-{idx}", classes="scope-remove-btn"))
+                list_panel.compose_add_child(row)
+        box.compose_add_child(list_panel)
         return box
 
     def add_scope_entry(self) -> None:
@@ -231,27 +274,33 @@ class ObserverApp(App):
     def _build_module_view(self, key: str) -> Container:
         mod, label, is_interface = MODULES[key]
         box = Vertical()
-        box.compose_add_child(Static(label, classes="panel-title"))
+        box.compose_add_child(Static(f"{ICONS[key]} {label}", classes="panel-title"))
 
+        form = Vertical(classes="card")
         if is_interface:
-            box.compose_add_child(Static(
+            form.compose_add_child(Static(
                 "Passive mode: listens on a local interface for 30s and flags "
                 "suspicious patterns (port-scan-like SYNs, ARP spoofing, abnormal "
                 "traffic volume). Leave blank for the default interface. Needs "
                 "root/CAP_NET_RAW to sniff.",
                 classes="hint",
             ))
-            box.compose_add_child(Input(placeholder="interface (optional, e.g. eth0)", id=f"{key}-target"))
+            form.compose_add_child(Input(placeholder="interface (optional, e.g. eth0)", id=f"{key}-target"))
         else:
-            box.compose_add_child(Static(
+            form.compose_add_child(Static(
                 "Target must already be added in Scope.", classes="hint",
             ))
-            box.compose_add_child(Input(placeholder="target, e.g. example.com", id=f"{key}-target"))
+            form.compose_add_child(Input(placeholder="target, e.g. example.com", id=f"{key}-target"))
+        form.compose_add_child(Button(f"▶ Run {label}", id=f"run-{key}", variant="primary"))
+        box.compose_add_child(form)
 
-        box.compose_add_child(Button(f"Run {label}", id=f"run-{key}", variant="primary"))
+        loading = LoadingIndicator(id=f"{key}-loading")
+        loading.display = False
+        box.compose_add_child(loading)
+
         box.compose_add_child(Log(id=f"{key}-log", auto_scroll=True))
 
-        table = DataTable(id=f"{key}-results")
+        table = DataTable(id=f"{key}-results", zebra_stripes=True)
         table.add_columns("Severity", "Title", "Detail")
         box.compose_add_child(table)
         return box
@@ -274,6 +323,8 @@ class ObserverApp(App):
         log_widget.write_line(f"Starting {label} against '{target or 'default'}' ...")
         run_button = self.query_one(f"#run-{key}", Button)
         run_button.disabled = True
+        loading = self.query_one(f"#{key}-loading", LoadingIndicator)
+        loading.display = True
 
         def worker():
             def ui_log(msg: str) -> None:
@@ -295,6 +346,7 @@ class ObserverApp(App):
                     json_path, md_path = save_report(target or key, findings)
                     log_widget.write_line(f"Saved report: {md_path.name}")
                 run_button.disabled = False
+                loading.display = False
 
             self.call_from_thread(finish)
 
@@ -304,17 +356,38 @@ class ObserverApp(App):
 
     def _build_reports(self) -> Container:
         box = Vertical()
-        box.compose_add_child(Static("Saved reports", classes="panel-title"))
+        box.compose_add_child(Static(f"{ICONS['reports']} Saved reports", classes="panel-title"))
         reports = list_reports()
+        self._report_paths = reports
         if not reports:
             box.compose_add_child(Static("No reports yet — run a module first.", classes="hint"))
         else:
-            table = DataTable()
-            table.add_columns("File", "Path")
-            for p in reports:
-                table.add_row(p.name, str(p))
+            box.compose_add_child(Static("Click a report to preview it below.", classes="hint"))
+            table = DataTable(id="reports-table", cursor_type="row", zebra_stripes=True)
+            table.add_columns("File", "Modified")
+            for idx, p in enumerate(reports):
+                try:
+                    mtime = datetime.fromtimestamp(p.stat().st_mtime).strftime("%Y-%m-%d %H:%M")
+                except OSError:
+                    mtime = "?"
+                table.add_row(p.name, mtime, key=str(idx))
             box.compose_add_child(table)
+            box.compose_add_child(Rule())
+            box.compose_add_child(VerticalScroll(Markdown(id="report-preview"), classes="card", id="report-preview-panel"))
         return box
+
+    def on_data_table_row_selected(self, event: DataTable.RowSelected) -> None:
+        if event.data_table.id != "reports-table" or event.row_key.value is None:
+            return
+        idx = int(event.row_key.value)
+        if idx >= len(self._report_paths):
+            return
+        path = self._report_paths[idx]
+        try:
+            content = path.read_text()
+        except OSError as exc:
+            content = f"Could not read `{path}`: {exc}"
+        self.query_one("#report-preview", Markdown).update(content)
 
 
 def main() -> None:
